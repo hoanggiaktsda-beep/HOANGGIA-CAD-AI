@@ -31,9 +31,10 @@ jobs:
           test -s dist/wasm/libredwg-web.wasm
           test -s dist/wasm/libredwg-web.js
           test -s dist/wasm/dwg-worker.js
-          grep -q 'DWG WASM' dist/index.html
+          grep -q 'DWG Workspace' dist/index.html
           cp ../cad.html dist/editor.html
           cp dist/index.html dist/dwg.html
+          cp dist/index.html dist/workspace.html
           printf 'DWG WASM viewer build: %s\n' "$GITHUB_SHA" > dist/build-version.txt
           echo "Verified viewer, WASM, worker and DXF editor fallback"
       - uses: actions/configure-pages@v5
@@ -48,7 +49,7 @@ jobs:
           BASE="https://hoanggiaktsda-beep.github.io/HOANGGIA-CAD-AI"
           for i in $(seq 1 12); do
             status=$(curl -L -s -o /tmp/dwg.html -w '%{http_code}' "$BASE/dwg.html?sha=$GITHUB_SHA")
-            if [ "$status" = "200" ] && grep -q 'DWG thử nghiệm' /tmp/dwg.html; then
+            if [ "$status" = "200" ] && grep -q 'DWG Workspace' /tmp/dwg.html; then
               echo "Public DWG viewer verified at $BASE/dwg.html"
               exit 0
             fi

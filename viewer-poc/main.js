@@ -66,6 +66,8 @@ document.getElementById('file').addEventListener('change', async event => {
 });
 
 fitButton.addEventListener('click', fitDrawing);
+document.getElementById('fit-secondary').addEventListener('click', fitDrawing);
+document.getElementById('file').addEventListener('change', event => { const name = event.target.files?.[0]?.name; if (name) document.getElementById('filename').textContent = name; });
 window.addEventListener('error', event => {
   if (loadedName) setStatus('Lỗi trình duyệt: ' + event.message + '. ' + diagnoseCanvas());
 });

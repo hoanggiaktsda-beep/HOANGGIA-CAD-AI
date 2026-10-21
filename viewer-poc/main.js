@@ -12,9 +12,35 @@ let loading = false;
 let backend = 'auto';
 let lastResult;
 let lastStats;
+let originalDocument;
+const hiddenLayers = new Set();
+let isolatedLayer = null;
+let monochrome = false;
 const CANVAS2D_MAX_BYTES = 8 * 1024 * 1024;
 const CANVAS2D_MAX_PRIMITIVES = 12000;
 const actionBar = document.querySelector('.toolbar');
+
+// A lightweight layer inspector: no server upload and no DWG re-decoding.
+const panel = document.createElement('aside');
+panel.id = 'cad-layer-panel';
+panel.hidden = true;
+panel.style.cssText = 'position:absolute;right:8px;top:8px;bottom:8px;width:min(330px,90%);overflow:auto;background:#111b29f2;color:#e8eef8;border:1px solid #52637a;border-radius:9px;padding:12px;z-index:10;box-shadow:0 10px 40px #0008';
+document.querySelector('.stage').appendChild(panel);
+const layerButton = document.createElement('button');
+layerButton.type = 'button';
+layerButton.textContent = 'Layer / Lọc bản vẽ';
+actionBar.appendChild(layerButton);
+layerButton.addEventListener('click', () => { panel.hidden = !panel.hidden; if (!panel.hidden) renderLayerPanel(); });
+const colorButton = document.createElement('button');
+colorButton.type = 'button';
+colorButton.textContent = 'Nét đơn sắc';
+actionBar.appendChild(colorButton);
+colorButton.addEventListener('click', () => {
+  monochrome = !monochrome;
+  viewer.setColorMode(monochrome ? 'monochrome' : 'source', '#e5edf7');
+  colorButton.textContent = monochrome ? 'Màu layer gốc' : 'Nét đơn sắc';
+  setStatus('Chế độ màu: ' + (monochrome ? 'đơn sắc' : 'theo bản DWG') + ' · ' + summaryText());
+});
 
 
 // Reference fonts are kept local to the browser; never uploaded to a server.
@@ -88,6 +114,84 @@ function createViewer(mode) {
   });
 }
 
+
+function layerNames() {
+  return Object.keys(originalDocument?.layers || {}).sort((a,b)=>a.localeCompare(b,'vi'));
+}
+function applyLayerFilter() {
+  if (!originalDocument || !lastResult || loading) return;
+  // Preserve original parser data and the current zoom/pan. Only alter visibility
+  // on a shallow render copy; never mutate the source DWG document.
+  const currentView = viewer.renderer.getViewState();
+  const layers = Object.fromEntries(Object.entries(originalDocument.layers || {}).map(([name, layer]) => [
+    name, { ...layer, isVisible: layer.isVisible !== false &&
+      !hiddenLayers.has(name) && (!isolatedLayer || isolatedLayer === name) }
+  ]));
+  const document = { ...originalDocument, layers };
+  viewer.setDocument(document, loadedName);
+  viewer.renderer.setViewState(currentView);
+  // setDocument returns a new load result, but the source remains the untouched DWG.
+  setStatus('Đã áp dụng bộ lọc layer (không thay đổi file gốc). ' + summaryText());
+}
+function renderLayerPanel() {
+  panel.replaceChildren();
+  const heading = document.createElement('h3');
+  heading.textContent = 'LAYER · ' + layerNames().length;
+  heading.style.margin = '0 0 10px';
+  panel.appendChild(heading);
+  if (!originalDocument) {
+    const message = document.createElement('p');
+    message.textContent = 'Hãy mở DWG trước.';
+    panel.appendChild(message);
+    return;
+  }
+  const reset = document.createElement('button');
+  reset.textContent = 'Hiện tất cả / Bỏ cô lập';
+  reset.addEventListener('click', () => {
+    hiddenLayers.clear(); isolatedLayer = null;
+    applyLayerFilter(); renderLayerPanel();
+  });
+  panel.appendChild(reset);
+  const filter = document.createElement('input');
+  filter.type = 'search';
+  filter.placeholder = 'Tìm layer…';
+  filter.style.cssText = 'display:block;width:100%;margin:10px 0;padding:8px;background:#273547;color:white;border:1px solid #53647b;border-radius:6px';
+  panel.appendChild(filter);
+  const list = document.createElement('div');
+  panel.appendChild(list);
+  const names = layerNames();
+  function paint() {
+    list.replaceChildren();
+    for (const name of names.filter(n=>n.toLowerCase().includes(filter.value.toLowerCase()))) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 2px;border-bottom:1px solid #344354';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = !hiddenLayers.has(name);
+      checkbox.style.display = 'inline-block';
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) hiddenLayers.delete(name); else hiddenLayers.add(name);
+        applyLayerFilter();
+      });
+      const title = document.createElement('span');
+      title.textContent = name;
+      title.title = name;
+      title.style.cssText = 'flex:1;overflow-wrap:anywhere;font-size:12px';
+      const solo = document.createElement('button');
+      solo.textContent = isolatedLayer === name ? 'Bỏ lọc' : 'Chỉ lớp';
+      solo.style.padding = '5px';
+      solo.addEventListener('click', () => {
+        isolatedLayer = isolatedLayer === name ? null : name;
+        applyLayerFilter(); paint();
+      });
+      row.append(checkbox,title,solo);
+      list.appendChild(row);
+    }
+  }
+  filter.addEventListener('input', paint);
+  paint();
+}
+
 function summaryText() {
   if (!lastResult) return 'Chưa có kết quả phân tích.';
   const doc = lastResult.document;
@@ -129,6 +233,9 @@ async function loadDrawing(file) {
   selectedFile = file;
   loadedName = '';
   lastResult = undefined;
+  originalDocument = undefined;
+  hiddenLayers.clear();
+  isolatedLayer = null;
   loading = true;
   fitButton.disabled = true;
   fallbackButton.disabled = true;
@@ -137,7 +244,9 @@ async function loadDrawing(file) {
   try {
     const result = await viewer.loadFile(file);
     lastResult = result;
+    originalDocument = result.document;
     loadedName = file.name;
+    if (!panel.hidden) renderLayerPanel();
     // The CAD canvas is inside a responsive workspace; ensure its final size is applied.
     viewer.resize();
     viewer.fit('auto');

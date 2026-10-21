@@ -29,7 +29,7 @@ function createViewer(mode) {
     wasmPath: new URL('./wasm/', document.baseURI).href,
     workerUrl: new URL('./wasm/dwg-worker.js', document.baseURI).href,
     renderer: mode,
-    canvasOptions: { fitMode: 'extents', background: '#0b1120' },
+    canvasOptions: { fitMode: 'auto', background: '#0b1120' },
     onRenderStats: stats => { lastStats = stats; },
     onLoadProgress: progress => {
       if (loading) setStatus((progress.message || progress.phase || 'Đang đọc bản vẽ') +
@@ -57,7 +57,7 @@ function canvasText() {
   return 'Canvas: ' + (canvases.map(c => c.width + '×' + c.height).join(', ') || 'không có');
 }
 
-function fitDrawing(mode = 'extents') {
+function fitDrawing(mode = 'auto') {
   if (!lastResult) {
     setStatus('Chưa tải bản vẽ. Hãy mở DWG / DXF.');
     return;
@@ -88,10 +88,10 @@ async function loadDrawing(file) {
     loadedName = file.name;
     // The CAD canvas is inside a responsive workspace; ensure its final size is applied.
     viewer.resize();
-    viewer.fit('extents');
+    viewer.fit('auto');
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     setStatus('Đã phân tích ' + file.name + ' · ' + summaryText() + ' · ' + canvasText() +
-      '. Nếu trống, bấm Thử Canvas2D.');
+      '. Nếu hình quá nhỏ, bấm Vừa nội dung; Toàn bộ đối tượng có thể bao gồm nét nằm xa.');
     console.info('CAD drawing diagnostics', { summary: result.summary, warnings: result.warnings, render: lastStats });
   } catch (error) {
     setStatus('Không thể đọc/dựng DWG: ' + (error?.message || String(error)) + ' · ' + canvasText());
@@ -105,8 +105,10 @@ async function loadDrawing(file) {
 
 createViewer(backend);
 document.getElementById('file').addEventListener('change', event => loadDrawing(event.target.files?.[0]));
-fitButton.addEventListener('click', () => fitDrawing('extents'));
+fitButton.addEventListener('click', () => fitDrawing('auto'));
 document.getElementById('fit-secondary').addEventListener('click', () => fitDrawing('extents'));
+document.getElementById('fit-secondary').textContent = 'Toàn bộ đối tượng';
+fitButton.textContent = 'Vừa nội dung';
 
 fallbackButton.addEventListener('click', async () => {
   if (loading) return;

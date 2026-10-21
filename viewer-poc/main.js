@@ -473,6 +473,73 @@ window.addEventListener('resize', () => {
   if (!viewer) return;
   try { viewer.resize(); } catch (error) { console.warn('Resize CAD viewer failed', error); }
 });
+
+/* Studio task navigation: progressive disclosure, reuse existing working actions. */
+const studioDrawer = document.getElementById('studio-drawer');
+const studioBody = document.getElementById('studio-drawer-body');
+const studioTitle = document.getElementById('studio-drawer-title');
+const studioNav = document.querySelector('.studio-nav');
+const studioClose = () => {
+  studioDrawer.hidden = true;
+  studioNav.querySelectorAll('[data-studio]').forEach(b => b.classList.toggle('active', b.dataset.studio === 'view'));
+  requestAnimationFrame(() => viewer?.resize());
+};
+document.getElementById('studio-drawer-close').addEventListener('click', studioClose);
+const makeTool = (label, callback) => {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.textContent = label;
+  b.addEventListener('click', callback);
+  return b;
+};
+function showStudioDrawer(mode) {
+  studioBody.replaceChildren();
+  studioTitle.textContent = mode === 'tools' ? 'Công cụ bản vẽ' : 'Kiểm tra kỹ thuật';
+  const description = document.createElement('p');
+  description.textContent = mode === 'tools'
+    ? 'Các thao tác thường dùng khi xem DWG. Bản vẽ gốc không bị thay đổi.'
+    : 'Thông tin chuyên sâu chỉ mở khi cần kiểm tra lỗi hiển thị.';
+  studioBody.appendChild(description);
+  if (mode === 'tools') {
+    studioBody.append(
+      makeTool('＋ Phóng to', () => { if (lastResult) viewer.zoomIn(); else setStatus('Hãy mở DWG trước.'); }),
+      makeTool('− Thu nhỏ', () => { if (lastResult) viewer.zoomOut(); else setStatus('Hãy mở DWG trước.'); }),
+      makeTool('⌗ Vừa nội dung', () => fitButton.click()),
+      makeTool('◐ Đổi màu nét', () => colorButton.click()),
+      makeTool('⌘ Dòng lệnh CAD', () => { commandWrap.hidden=false; commandWrap.style.display='flex'; commandInput.focus(); })
+    );
+  } else {
+    studioBody.append(
+      makeTool('Kiểm tra đối tượng DWG', () => detailButton.click()),
+      makeTool('Phân tích block và DIM', () => auditButton.click())
+    );
+    // Move the real file input label; preserves the change handler.
+    studioBody.appendChild(fontLabel);
+    if (fallbackButton && !fallbackButton.disabled) studioBody.appendChild(fallbackButton);
+  }
+  studioDrawer.hidden = false;
+  studioNav.querySelectorAll('[data-studio]').forEach(b => b.classList.toggle('active', b.dataset.studio === mode));
+}
+studioNav.addEventListener('click', event => {
+  const mode = event.target.closest('[data-studio]')?.dataset.studio;
+  if (!mode) return;
+  if (mode === 'fit') { fitButton.click(); return; }
+  if (mode === 'view') { panel.hidden = true; studioClose(); return; }
+  if (mode === 'layers') {
+    studioClose();
+    panel.hidden = false;
+    renderLayerPanel();
+    studioNav.querySelector('[data-studio="layers"]').classList.add('active');
+    return;
+  }
+  panel.hidden = true;
+  showStudioDrawer(mode);
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && !studioDrawer.hidden) studioClose();
+});
+// Hide the original diagnostic controls without removing their event listeners.
+
 window.addEventListener('error', event => {
   if (loadedName) setStatus('Lỗi trình duyệt: ' + event.message + ' · ' + summaryText());
 });

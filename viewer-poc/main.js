@@ -16,6 +16,54 @@ const CANVAS2D_MAX_BYTES = 8 * 1024 * 1024;
 const CANVAS2D_MAX_PRIMITIVES = 12000;
 const actionBar = document.querySelector('.toolbar');
 
+
+// Reference fonts are kept local to the browser; never uploaded to a server.
+const fontLabel = document.createElement('label');
+fontLabel.className = 'file-button';
+fontLabel.textContent = 'Nạp font SHX';
+fontLabel.title = 'Nạp font SHX gốc để khôi phục chữ và ký hiệu CAD';
+const fontInput = document.createElement('input');
+fontInput.type = 'file';
+fontInput.accept = '.shx';
+fontInput.multiple = true;
+fontInput.style.display = 'none';
+fontLabel.appendChild(fontInput);
+actionBar.appendChild(fontLabel);
+const detailButton = document.createElement('button');
+detailButton.type = 'button';
+detailButton.textContent = 'Kiểm tra DWG';
+actionBar.appendChild(detailButton);
+function diagnoseGeometry() {
+  if (!lastResult) return 'Chưa mở DWG.';
+  const types = Object.entries(lastResult.summary?.byType || {})
+    .sort((a,b) => b[1]-a[1]).map(([k,v]) => k + ': ' + v).join(' · ');
+  const missing = viewer.getMissingReferences();
+  const refs = missing.length ? missing.map(x => x.fileName).join(', ') : 'không phát hiện';
+  const unsupported = lastStats?.unsupported ? Object.entries(lastStats.unsupported).map(([k,v])=>k+': '+v).join(', ') : '';
+  return 'Loại đối tượng: ' + (types || 'không rõ') +
+    ' | Font SHX thiếu: ' + refs +
+    ' | Đối tượng chưa hỗ trợ: ' + (unsupported || 'không báo cáo') +
+    ' | Nét bị bỏ qua: ' + (lastStats?.skipped ?? 'chưa rõ');
+}
+detailButton.addEventListener('click', () => {
+  const info = diagnoseGeometry();
+  setStatus(info);
+  console.info('DWG geometry audit', info, lastResult?.summary, viewer.getReferenceState(), lastStats);
+});
+fontInput.addEventListener('change', async () => {
+  if (loading) return;
+  const files = Array.from(fontInput.files || []);
+  let ok = 0;
+  const errors = [];
+  for (const file of files) {
+    try { await viewer.addReferenceFile(file); ok++; }
+    catch (error) { errors.push(file.name + ': ' + error.message); }
+  }
+  setStatus('Đã nạp ' + ok + '/' + files.length + ' font SHX. ' + (errors.join(' · ') || '') +
+    ' ' + diagnoseGeometry());
+  fontInput.value = '';
+});
+
 const fallbackButton = document.createElement('button');
 fallbackButton.type = 'button';
 fallbackButton.textContent = 'Canvas2D (chỉ file nhỏ)';
@@ -48,10 +96,12 @@ function summaryText() {
   const blocks = doc?.blocks?.length ?? Object.keys(doc?.blocks ?? {}).length;
   const layers = doc?.layers?.length ?? Object.keys(doc?.layers ?? {}).length;
   const warnings = (lastResult.warnings || []).length;
+  const missingFonts = viewer.getMissingReferences().length;
   const drawn = lastStats ? ' · Nét dựng: ' + (lastStats.drawn ?? '?') +
     '/' + (lastStats.total ?? '?') + ' (' + (lastStats.backend ?? backend) + ')' : '';
   return 'Đối tượng: ' + count + ' · Block: ' + blocks +
-    ' · Layer: ' + layers + ' · Cảnh báo: ' + warnings + drawn;
+    ' · Layer: ' + layers + ' · Cảnh báo: ' + warnings +
+    ' · Thiếu SHX: ' + missingFonts + drawn;
 }
 
 function canvasText() {

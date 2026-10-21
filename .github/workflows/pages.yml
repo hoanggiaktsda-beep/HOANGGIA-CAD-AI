@@ -33,6 +33,7 @@ jobs:
           test -s dist/wasm/dwg-worker.js
           grep -q 'DWG WASM' dist/index.html
           cp ../cad.html dist/editor.html
+          cp dist/index.html dist/dwg.html
           printf 'DWG WASM viewer build: %s\n' "$GITHUB_SHA" > dist/build-version.txt
           echo "Verified viewer, WASM, worker and DXF editor fallback"
       - uses: actions/configure-pages@v5

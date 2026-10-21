@@ -42,3 +42,18 @@ jobs:
           path: viewer-poc/dist
       - id: deployment
         uses: actions/deploy-pages@v4
+      - name: Verify public DWG viewer
+        run: |
+          set -euo pipefail
+          BASE="https://hoanggiaktsda-beep.github.io/HOANGGIA-CAD-AI"
+          for i in $(seq 1 12); do
+            status=$(curl -L -s -o /tmp/dwg.html -w '%{http_code}' "$BASE/dwg.html?sha=$GITHUB_SHA")
+            if [ "$status" = "200" ] && grep -q 'DWG thử nghiệm' /tmp/dwg.html; then
+              echo "Public DWG viewer verified at $BASE/dwg.html"
+              exit 0
+            fi
+            echo "Attempt $i: HTTP $status; retrying"
+            sleep 10
+          done
+          echo "::error::GitHub Pages does not serve the deployed DWG viewer"
+          exit 1

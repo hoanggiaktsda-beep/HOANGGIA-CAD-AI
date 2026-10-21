@@ -90,6 +90,75 @@ fontInput.addEventListener('change', async () => {
   fontInput.value = '';
 });
 
+
+function auditCadGeometry(doc) {
+  const blocks = doc?.blocks || {};
+  const counts = Object.create(null);
+  const missingBlocks = new Map();
+  const nonUniform = [];
+  const missingGeometry = [];
+  const cycles = [];
+  const visited = new Set();
+  let insertCount = 0;
+  const walk = (entities, trail, depth) => {
+    if (depth > 20) { cycles.push('Vượt 20 cấp: ' + trail.join(' > ')); return; }
+    for (const entity of entities || []) {
+      const type = String(entity.type || entity.kind || 'UNKNOWN').toUpperCase();
+      counts[type] = (counts[type] || 0) + 1;
+      if (type === 'DIMENSION' && !entity.blockName && !entity.name) missingGeometry.push('DIMENSION ' + (entity.handle || entity.id || 'không ID'));
+      if (entity.kind !== 'insert' && type !== 'INSERT' && type !== 'MINSERT') continue;
+      insertCount++;
+      const name = entity.blockName || entity.name;
+      if (!name || !blocks[name]) {
+        missingBlocks.set(String(name || '(không tên)'), (missingBlocks.get(String(name || '(không tên)')) || 0) + 1);
+        continue;
+      }
+      const scale = entity.scale || {};
+      const sx = Number(scale.x ?? entity.scaleX ?? 1), sy = Number(scale.y ?? entity.scaleY ?? 1);
+      if (Math.abs(Math.abs(sx) - Math.abs(sy)) > 1e-7 && nonUniform.length < 100) {
+        nonUniform.push({ block: name, scaleX: sx, scaleY: sy, handle: entity.handle || '' });
+      }
+      if (trail.includes(name)) { cycles.push([...trail,name].join(' > ')); continue; }
+      // Avoid exploding counts on repeated furniture instances; audit each definition once.
+      if (!visited.has(name)) {
+        visited.add(name);
+        walk(blocks[name].entities, [...trail,name], depth+1);
+      }
+    }
+  };
+  walk(doc?.entities || [], [], 0);
+  return { topLevelEntities: doc?.entities?.length || 0, definedBlocks: Object.keys(blocks).length,
+    referencedBlocks: visited.size, inserts: insertCount,
+    types: Object.fromEntries(Object.entries(counts).sort((a,b)=>b[1]-a[1])),
+    missingBlocks: Object.fromEntries(missingBlocks), nonUniformScales: nonUniform,
+    cycles: cycles.slice(0,30), dimensionWithoutGraphicsReference: missingGeometry.slice(0,50),
+    render: lastStats ? { total: lastStats.total, drawn: lastStats.drawn,
+      skipped: lastStats.skipped, unsupported: lastStats.unsupported } : null };
+}
+const auditButton = document.createElement('button');
+auditButton.type = 'button';
+auditButton.textContent = 'Phân tích block / DIM';
+actionBar.appendChild(auditButton);
+auditButton.addEventListener('click', () => {
+  if (!originalDocument) { setStatus('Mở bản DWG trước khi phân tích.'); return; }
+  const audit = auditCadGeometry(originalDocument);
+  const missing = Object.keys(audit.missingBlocks).length;
+  setStatus('BLOCK: ' + audit.definedBlocks + ' định nghĩa, ' + audit.inserts +
+    ' lượt INSERT đã kiểm tra · Thiếu block: ' + missing +
+    ' · Scale X/Y khác nhau: ' + audit.nonUniformScales.length +
+    ' · DIM thiếu tham chiếu hình học: ' + audit.dimensionWithoutGraphicsReference.length +
+    ' · Chu trình block: ' + audit.cycles.length +
+    '. Chi tiết trong bảng kiểm tra.');
+  panel.hidden = false;
+  panel.replaceChildren();
+  const h = document.createElement('h3'); h.textContent = 'Kiểm tra độ chính xác DWG'; panel.appendChild(h);
+  const pre = document.createElement('pre');
+  pre.style.cssText = 'white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.6 monospace';
+  pre.textContent = JSON.stringify(audit,null,2);
+  panel.appendChild(pre);
+  console.info('HOANGGIA CAD AI fidelity audit', audit);
+});
+
 const fallbackButton = document.createElement('button');
 fallbackButton.type = 'button';
 fallbackButton.textContent = 'Canvas2D (chỉ file nhỏ)';

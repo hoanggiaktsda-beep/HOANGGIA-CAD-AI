@@ -26,9 +26,67 @@ button:focus-visible,.file-button:focus-within,input:focus-visible{outline:2px s
 #status{background:#0e130f;color:#b9c8bb;border-top:1px solid var(--hg-line)}
 #cad-layer-panel{background:#141916f5!important;border-color:#415540!important}
 @media(max-width:650px){.top{padding:10px 12px}.brand{font-size:13px}.toolbar{padding:8px}.toolbar button,.toolbar .file-button{font-size:12px}.workspace{min-height:300px}}
+
+/* Adaptive Workspace v1: three distinct device layouts, not scaled desktop UI. */
+html,body{height:100%;overflow:hidden}
+body{display:flex;flex-direction:column;min-height:0}
+.top,.toolbar,.bottom,#status{flex-shrink:0}
+.workspace{height:auto;min-height:0;flex:1}
+#viewer{touch-action:none}
+.toolbar{overflow-x:auto;scrollbar-width:thin;flex-wrap:nowrap}
+.toolbar>*{flex-shrink:0}
+#status{max-height:68px;overflow:auto}
+.device-dock{display:none}
+.device-dock button{min-width:48px;min-height:48px}
+#cad-layer-panel[hidden]{display:none!important}
+@media(min-width:1100px) and (pointer:fine){
+ .workspace{min-height:0}
+ .rail{width:56px;gap:12px}
+ .toolbar{flex-wrap:wrap;overflow:visible}
+ .top{padding:12px 22px}
+ .bottom{padding:7px 16px}
+}
+@media(min-width:700px) and (max-width:1099px), (min-width:700px) and (pointer:coarse){
+ .top{min-height:56px;padding:9px 14px}
+ .toolbar{min-height:58px;padding:8px;gap:8px}
+ .toolbar button,.toolbar .file-button{min-height:44px}
+ .rail{width:54px}
+ .rail button{min-height:44px;width:44px}
+ .bottom{padding:6px 12px}
+ #cad-layer-panel{width:min(380px,55%)!important}
+}
+@media(max-width:699px){
+ .top{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:7px;align-items:center;padding:8px 10px;min-height:58px}
+ .brand{width:auto!important;min-width:0;font-size:12px}
+ .filename{grid-column:1/-1;grid-row:2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
+ .top .file-button{grid-column:2;grid-row:1;min-height:42px;padding:9px!important;white-space:nowrap}
+ .top #fit{grid-column:3;grid-row:1;min-height:42px;padding:9px}
+ .top .muted{display:none}
+ .toolbar{display:none}
+ .rail{display:none}
+ .workspace{min-height:0}
+ .hint{font-size:10px;top:7px;left:7px;padding:5px 7px}
+ .axis{bottom:12px;left:10px;font-size:11px}
+ .bottom{display:none}
+ .device-dock{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;padding:6px max(8px,env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left));background:#101411;border-top:1px solid #29352d}
+ .device-dock button{padding:7px 2px;font-size:11px;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+ .device-dock button strong{font-size:17px;line-height:1}
+ #status{max-height:43px;min-height:34px;padding:6px 10px;font-size:10px}
+ #cad-layer-panel{inset:5px 5px 5px auto!important;width:min(340px,96%)!important}
+}
+@media(max-width:699px) and (orientation:landscape){
+ .top{min-height:43px;padding:3px 10px;display:flex}
+ .top .filename{display:none}
+ .top .file-button,.top #fit{min-height:36px}
+ .device-dock{grid-template-columns:repeat(5,1fr);padding:3px max(6px,env(safe-area-inset-right)) 3px max(6px,env(safe-area-inset-left))}
+ .device-dock button{min-height:35px;padding:3px}
+ .device-dock button strong{font-size:14px}
+ .device-dock button span{display:none}
+ #status{max-height:28px;min-height:28px}
+}
 </style></head><body>
 <header class="top"><div class="brand">HOANGGIA <span style="color:var(--hg-gold)">CAD AI</span></div><span class="filename" id="filename">DWG Workspace · Bản thử nghiệm</span><label class="file-button" for="file">Mở DWG / DXF</label><input id="file" type="file" accept=".dwg,.dxf"><button id="fit">Vừa khung</button><small class="muted">Đọc trực tiếp trên thiết bị</small></header>
 <nav class="toolbar"><span>Khung nhìn</span><button type="button" disabled title="Đang kiểm tra API zoom">Phóng to +</button><button type="button" disabled title="Đang kiểm tra API zoom">Thu nhỏ −</button><button id="fit-secondary" type="button">Toàn bản vẽ</button><span>Kiểm tra</span><button type="button" disabled title="Chưa triển khai">Layer (sắp có)</button><button type="button" disabled title="Chưa triển khai">Đo (sắp có)</button></nav>
 <div class="workspace"><aside class="rail" aria-label="Công cụ"><button type="button" disabled title="Layer">▤</button><button type="button" disabled title="Đo">⌖</button></aside><main class="stage"><div id="viewer"></div><div class="hint">Model · Mặt bằng 2D · Bản thử nghiệm DWG</div><div class="axis">Y ↑<br>└──→ X</div></main></div>
-<footer class="bottom"><span class="tab">Model</span><span class="muted">Layout (chưa hỗ trợ)</span><span class="muted">DWG / DXF · WebAssembly</span></footer><div id="status" role="status">Sẵn sàng. Hãy mở DWG để kiểm tra khả năng đọc và hiển thị bản vẽ.</div>
+<nav class="device-dock" aria-label="Công cụ CAD trên điện thoại"><button type="button" data-cad-action="zoom-in"><strong>＋</strong><span>Phóng</span></button><button type="button" data-cad-action="zoom-out"><strong>−</strong><span>Thu</span></button><button type="button" data-cad-action="fit"><strong>⌗</strong><span>Vừa khung</span></button><button type="button" data-cad-action="layers"><strong>▤</strong><span>Layer</span></button><button type="button" data-cad-action="command"><strong>⌘</strong><span>Lệnh</span></button></nav><footer class="bottom"><span class="tab">Model</span><span class="muted">Layout (chưa hỗ trợ)</span><span class="muted">DWG / DXF · WebAssembly</span></footer><div id="status" role="status">Sẵn sàng. Hãy mở DWG để kiểm tra khả năng đọc và hiển thị bản vẽ.</div>
 <script type="module" src="./main.js"></script></body></html>

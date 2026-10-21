@@ -12,12 +12,14 @@ let loading = false;
 let backend = 'auto';
 let lastResult;
 let lastStats;
+const CANVAS2D_MAX_BYTES = 8 * 1024 * 1024;
+const CANVAS2D_MAX_PRIMITIVES = 12000;
 const actionBar = document.querySelector('.toolbar');
 
 const fallbackButton = document.createElement('button');
 fallbackButton.type = 'button';
-fallbackButton.textContent = 'Thử Canvas2D';
-fallbackButton.title = 'Đổi công nghệ dựng hình khi WebGL không hiển thị nét vẽ';
+fallbackButton.textContent = 'Canvas2D (chỉ file nhỏ)';
+fallbackButton.title = 'Canvas2D có thể treo trình duyệt với DWG nhiều nét; file lớn sẽ bị chặn';
 actionBar.appendChild(fallbackButton);
 
 function createViewer(mode) {
@@ -91,7 +93,7 @@ async function loadDrawing(file) {
     viewer.fit('auto');
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     setStatus('Đã phân tích ' + file.name + ' · ' + summaryText() + ' · ' + canvasText() +
-      '. Nếu hình quá nhỏ, bấm Vừa nội dung; Toàn bộ đối tượng có thể bao gồm nét nằm xa.');
+      '. Đang ở chế độ xem thử; cần đối chiếu CAD gốc vì block, hatch, text hoặc nét có thể chưa hiển thị chính xác.');
     console.info('CAD drawing diagnostics', { summary: result.summary, warnings: result.warnings, render: lastStats });
   } catch (error) {
     setStatus('Không thể đọc/dựng DWG: ' + (error?.message || String(error)) + ' · ' + canvasText());
@@ -99,7 +101,8 @@ async function loadDrawing(file) {
   } finally {
     loading = false;
     fitButton.disabled = false;
-    fallbackButton.disabled = false;
+    fallbackButton.disabled = Boolean(selectedFile && (selectedFile.size > CANVAS2D_MAX_BYTES || (lastStats?.total ?? 0) > CANVAS2D_MAX_PRIMITIVES)) && backend !== 'canvas2d';
+    fallbackButton.title = fallbackButton.disabled ? 'DWG lớn: khóa Canvas2D để tránh treo máy. Dùng WebGL.' : 'Chuyển bộ dựng hình';
   }
 }
 
@@ -112,8 +115,12 @@ fitButton.textContent = 'Vừa nội dung';
 
 fallbackButton.addEventListener('click', async () => {
   if (loading) return;
+  if (backend !== 'canvas2d' && selectedFile && (selectedFile.size > CANVAS2D_MAX_BYTES || (lastStats?.total ?? 0) > CANVAS2D_MAX_PRIMITIVES)) {
+    setStatus('Đã chặn Canvas2D để bảo vệ thiết bị: bản vẽ quá lớn hoặc có quá nhiều nét. Dùng WebGL. ' + summaryText());
+    return;
+  }
   backend = backend === 'canvas2d' ? 'auto' : 'canvas2d';
-  fallbackButton.textContent = backend === 'canvas2d' ? 'Thử WebGL' : 'Thử Canvas2D';
+  fallbackButton.textContent = backend === 'canvas2d' ? 'Trở về WebGL' : 'Canvas2D (chỉ file nhỏ)';
   createViewer(backend);
   if (selectedFile) await loadDrawing(selectedFile);
   else setStatus('Đã chuyển sang ' + backend + '. Hãy mở bản vẽ.');

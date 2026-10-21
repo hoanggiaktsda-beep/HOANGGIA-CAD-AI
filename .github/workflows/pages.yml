@@ -12,20 +12,29 @@ concurrency:
   cancel-in-progress: true
 jobs:
   deploy:
+    runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Build DWG WASM viewer
+      - name: Build DWG WebAssembly viewer
         run: |
+          set -euo pipefail
           cd viewer-poc
           npm install --no-audit --no-fund
           npm run build
+          test -s dist/index.html
+          test -s dist/wasm/libredwg-web.wasm
+          test -s dist/wasm/libredwg-web.js
+          test -s dist/wasm/dwg-worker.js
+          grep -q 'DWG WASM' dist/index.html
+          cp ../cad.html dist/editor.html
+          printf 'DWG WASM viewer build: %s\n' "$GITHUB_SHA" > dist/build-version.txt
+          echo "Verified viewer, WASM, worker and DXF editor fallback"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

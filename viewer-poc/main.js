@@ -427,6 +427,48 @@ document.addEventListener('keydown', event => {
   if (event.key === ':' || event.key === '/') { event.preventDefault(); commandInput.focus(); }
 });
 
+
+/* Platform-specific controls share the same viewer, without reloading the DWG. */
+const deviceDock = document.querySelector('.device-dock');
+const platformQuery = window.matchMedia('(max-width:699px)');
+function updatePlatform() {
+  const mobile = platformQuery.matches;
+  document.body.dataset.platform = mobile ? 'mobile' :
+    window.matchMedia('(max-width:1099px), (pointer:coarse)').matches ? 'tablet' : 'desktop';
+  // Keep the command bar accessible but not covering the phone's drawing by default.
+  commandWrap.hidden = mobile && document.activeElement !== commandInput;
+  commandWrap.style.display = commandWrap.hidden ? 'none' : 'flex';
+  requestAnimationFrame(() => { try { viewer?.resize(); } catch (error) { console.warn(error); } });
+}
+deviceDock?.addEventListener('click', event => {
+  const action = event.target.closest('[data-cad-action]')?.dataset.cadAction;
+  if (!action) return;
+  if (action === 'command') {
+    commandWrap.hidden = false;
+    commandWrap.style.display = 'flex';
+    commandInput.focus();
+    return;
+  }
+  if (action === 'layers') { layerButton.click(); return; }
+  if (!lastResult) return setStatus('Hãy mở DWG trước.');
+  try {
+    if (action === 'zoom-in') viewer.zoomIn();
+    else if (action === 'zoom-out') viewer.zoomOut();
+    else if (action === 'fit') fitDrawing('auto');
+    if (action !== 'fit') setStatus('Zoom ' + viewer.getZoomPercent().toFixed(1) + '% · ' + summaryText());
+  } catch (error) { setStatus('Lỗi thao tác: ' + error.message); }
+});
+commandInput.addEventListener('blur', () => {
+  if (platformQuery.matches) {
+    commandWrap.hidden = true;
+    commandWrap.style.display = 'none';
+    requestAnimationFrame(() => viewer?.resize());
+  }
+});
+window.addEventListener('resize', updatePlatform);
+window.addEventListener('orientationchange', updatePlatform);
+updatePlatform();
+
 window.addEventListener('resize', () => {
   if (!viewer) return;
   try { viewer.resize(); } catch (error) { console.warn('Resize CAD viewer failed', error); }

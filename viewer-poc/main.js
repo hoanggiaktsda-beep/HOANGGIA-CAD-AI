@@ -3,75 +3,143 @@ import { CadViewer } from '@flyfish-dev/cad-viewer';
 const status = document.getElementById('status');
 const host = document.getElementById('viewer');
 const fitButton = document.getElementById('fit');
+const filenameLabel = document.getElementById('filename');
 const setStatus = message => { status.textContent = message; };
+let viewer;
+let selectedFile;
 let loadedName = '';
-let loadInProgress = false;
+let loading = false;
+let backend = 'auto';
+let lastResult;
+let lastStats;
+const actionBar = document.querySelector('.toolbar');
 
-const viewer = new CadViewer({
-  container: host,
-  wasmPath: new URL('./wasm/', document.baseURI).href,
-  workerUrl: new URL('./wasm/dwg-worker.js', document.baseURI).href,
-  renderer: 'auto',
-  canvasOptions: { fitMode: 'auto' },
-  onLoadProgress: progress => {
-    if (!loadInProgress) return;
-    setStatus((progress.message || progress.phase || 'Đang đọc bản vẽ') +
-      (progress.percent == null ? '' : ' · ' + progress.percent + '%'));
-  }
-});
+const fallbackButton = document.createElement('button');
+fallbackButton.type = 'button';
+fallbackButton.textContent = 'Thử Canvas2D';
+fallbackButton.title = 'Đổi công nghệ dựng hình khi WebGL không hiển thị nét vẽ';
+actionBar.appendChild(fallbackButton);
 
-function diagnoseCanvas() {
-  const canvases = [...host.querySelectorAll('canvas')];
-  if (!canvases.length) return 'Không tìm thấy canvas dựng hình.';
-  const sizes = canvases.map(c => c.width + '×' + c.height).join(', ');
-  const valid = canvases.some(c => c.width > 0 && c.height > 0);
-  return valid ? 'Canvas: ' + sizes + '. Nếu màn hình trống, có thể lỗi dựng hình hoặc nội dung bản vẽ.' :
-    'Canvas chưa có kích thước: ' + sizes + '.';
+function createViewer(mode) {
+  if (viewer) viewer.destroy();
+  host.replaceChildren();
+  lastStats = undefined;
+  viewer = new CadViewer({
+    container: host,
+    wasmPath: new URL('./wasm/', document.baseURI).href,
+    workerUrl: new URL('./wasm/dwg-worker.js', document.baseURI).href,
+    renderer: mode,
+    canvasOptions: { fitMode: 'extents', background: '#0b1120' },
+    onRenderStats: stats => { lastStats = stats; },
+    onLoadProgress: progress => {
+      if (loading) setStatus((progress.message || progress.phase || 'Đang đọc bản vẽ') +
+        (progress.percent == null ? '' : ' · ' + progress.percent + '%'));
+    }
+  });
 }
 
-function fitDrawing() {
-  if (!loadedName) {
-    setStatus('Chưa có bản vẽ được tải. Hãy mở DWG/DXF trước.');
+function summaryText() {
+  if (!lastResult) return 'Chưa có kết quả phân tích.';
+  const doc = lastResult.document;
+  const summary = lastResult.summary;
+  const count = doc?.entities?.length ?? 0;
+  const blocks = doc?.blocks?.length ?? Object.keys(doc?.blocks ?? {}).length;
+  const layers = doc?.layers?.length ?? Object.keys(doc?.layers ?? {}).length;
+  const warnings = (lastResult.warnings || []).length;
+  const drawn = lastStats ? ' · Nét dựng: ' + (lastStats.drawn ?? '?') +
+    '/' + (lastStats.total ?? '?') + ' (' + (lastStats.backend ?? backend) + ')' : '';
+  return 'Đối tượng: ' + count + ' · Block: ' + blocks +
+    ' · Layer: ' + layers + ' · Cảnh báo: ' + warnings + drawn;
+}
+
+function canvasText() {
+  const canvases = [...host.querySelectorAll('canvas')];
+  return 'Canvas: ' + (canvases.map(c => c.width + '×' + c.height).join(', ') || 'không có');
+}
+
+function fitDrawing(mode = 'extents') {
+  if (!lastResult) {
+    setStatus('Chưa tải bản vẽ. Hãy mở DWG / DXF.');
     return;
   }
   try {
-    viewer.fit('auto');
-    setStatus('Đã yêu cầu vừa khung cho ' + loadedName + '. ' + diagnoseCanvas() +
-      ' Nút Vừa khung không phải lựa chọn tỷ lệ 1:50 / 1:100.');
+    viewer.resize();
+    viewer.fit(mode);
+    setStatus('Vừa khung ' + mode + ' · ' + summaryText() + ' · ' + canvasText());
   } catch (error) {
-    setStatus('Lỗi vừa khung: ' + (error?.message || String(error)) + '. ' + diagnoseCanvas());
-    console.error('CAD fit failed', error);
+    setStatus('Lỗi vừa khung: ' + (error?.message || String(error)) + ' · ' + summaryText());
+    console.error(error);
   }
 }
 
-document.getElementById('file').addEventListener('change', async event => {
-  const file = event.target.files?.[0];
-  if (!file) return;
+async function loadDrawing(file) {
+  if (!file || loading) return;
+  selectedFile = file;
   loadedName = '';
-  loadInProgress = true;
+  lastResult = undefined;
+  loading = true;
   fitButton.disabled = true;
-  setStatus('Đang đọc ' + file.name + ' (' + (file.size / 1048576).toFixed(1) + ' MB)…');
+  fallbackButton.disabled = true;
+  filenameLabel.textContent = file.name;
+  setStatus('Đang giải mã ' + file.name + ' (' + (file.size / 1048576).toFixed(1) + ' MB)…');
   try {
-    await viewer.loadFile(file);
+    const result = await viewer.loadFile(file);
+    lastResult = result;
     loadedName = file.name;
-    setStatus('Đã xử lý ' + file.name + '. ' + diagnoseCanvas() +
-      ' Chưa thể xác nhận hình học đã hiển thị; hãy thử Vừa khung.');
+    // The CAD canvas is inside a responsive workspace; ensure its final size is applied.
+    viewer.resize();
+    viewer.fit('extents');
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    setStatus('Đã phân tích ' + file.name + ' · ' + summaryText() + ' · ' + canvasText() +
+      '. Nếu trống, bấm Thử Canvas2D.');
+    console.info('CAD drawing diagnostics', { summary: result.summary, warnings: result.warnings, render: lastStats });
   } catch (error) {
-    setStatus('Không đọc được file: ' + (error?.message || String(error)) + '. ' + diagnoseCanvas());
+    setStatus('Không thể đọc/dựng DWG: ' + (error?.message || String(error)) + ' · ' + canvasText());
     console.error('CAD load failed', error);
   } finally {
-    loadInProgress = false;
+    loading = false;
     fitButton.disabled = false;
+    fallbackButton.disabled = false;
   }
+}
+
+createViewer(backend);
+document.getElementById('file').addEventListener('change', event => loadDrawing(event.target.files?.[0]));
+fitButton.addEventListener('click', () => fitDrawing('extents'));
+document.getElementById('fit-secondary').addEventListener('click', () => fitDrawing('extents'));
+
+fallbackButton.addEventListener('click', async () => {
+  if (loading) return;
+  backend = backend === 'canvas2d' ? 'auto' : 'canvas2d';
+  fallbackButton.textContent = backend === 'canvas2d' ? 'Thử WebGL' : 'Thử Canvas2D';
+  createViewer(backend);
+  if (selectedFile) await loadDrawing(selectedFile);
+  else setStatus('Đã chuyển sang ' + backend + '. Hãy mở bản vẽ.');
 });
 
-fitButton.addEventListener('click', fitDrawing);
-document.getElementById('fit-secondary').addEventListener('click', fitDrawing);
-document.getElementById('file').addEventListener('change', event => { const name = event.target.files?.[0]?.name; if (name) document.getElementById('filename').textContent = name; });
+const toolbarButtons = [...actionBar.querySelectorAll('button')];
+const zoomIn = toolbarButtons.find(button => button.textContent.includes('Phóng to'));
+const zoomOut = toolbarButtons.find(button => button.textContent.includes('Thu nhỏ'));
+for (const [button, direction] of [[zoomIn, 'in'], [zoomOut, 'out']]) {
+  if (!button) continue;
+  button.disabled = false;
+  button.title = direction === 'in' ? 'Phóng to bản vẽ' : 'Thu nhỏ bản vẽ';
+  button.addEventListener('click', () => {
+    if (!lastResult) return setStatus('Hãy mở bản vẽ trước khi phóng to / thu nhỏ.');
+    try {
+      if (direction === 'in') viewer.zoomIn(); else viewer.zoomOut();
+      setStatus('Zoom ' + viewer.getZoomPercent().toFixed(1) + '% · ' + summaryText());
+    } catch (error) { setStatus('Lỗi zoom: ' + error.message); }
+  });
+}
+
+window.addEventListener('resize', () => {
+  if (!viewer) return;
+  try { viewer.resize(); } catch (error) { console.warn('Resize CAD viewer failed', error); }
+});
 window.addEventListener('error', event => {
-  if (loadedName) setStatus('Lỗi trình duyệt: ' + event.message + '. ' + diagnoseCanvas());
+  if (loadedName) setStatus('Lỗi trình duyệt: ' + event.message + ' · ' + summaryText());
 });
 window.addEventListener('unhandledrejection', event => {
-  if (loadedName) setStatus('Lỗi xử lý bản vẽ: ' +
-    (event.reason?.message || String(event.reason)) + '. ' + diagnoseCanvas());
+  if (loadedName) setStatus('Lỗi xử lý: ' + (event.reason?.message || String(event.reason)) + ' · ' + summaryText());
 });

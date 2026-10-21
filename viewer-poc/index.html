@@ -4,8 +4,30 @@
 *{box-sizing:border-box}body{margin:0;background:#171e28;color:#e7edf4;font:14px system-ui}button,.file-button,select{border:1px solid #49596b;border-radius:7px;background:#303c4c;color:#edf4ff;padding:9px 12px;font:inherit;cursor:pointer}button:disabled{opacity:.45;cursor:default}.file-button{background:#b99a63;color:#0d1520;font-weight:700}input[type=file]{display:none}
 .top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 14px;background:#111722;border-bottom:1px solid #435164}.brand{font-weight:800;color:#d9b879;white-space:nowrap}.filename{color:#acbdcc}.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;background:#344050;border-bottom:1px solid #46566a}.toolbar span{font-weight:700;color:#d4dce5;margin-right:5px}.workspace{display:flex;height:calc(100dvh - 204px);min-height:300px}.rail{width:48px;flex-shrink:0;background:#303b4a;display:flex;flex-direction:column;gap:8px;align-items:center;padding:12px 4px}.rail button{width:36px;padding:8px 0}.stage{position:relative;flex:1;min-width:0;background:#202831}#viewer{position:absolute;inset:0;width:100%;height:100%;min-height:0}.hint{position:absolute;top:12px;left:12px;pointer-events:none;background:#111a25d9;color:#bcd2e5;border-radius:6px;padding:7px 10px;font-size:12px}.axis{position:absolute;bottom:18px;left:20px;color:#c5d4df;pointer-events:none;font:13px monospace}.bottom{background:#111821;border-top:1px solid #3c4b5c;display:flex;align-items:center;gap:18px;padding:10px 14px;flex-wrap:wrap}.tab{background:#223a4c;padding:5px 13px;border-radius:4px}.muted{color:#aebfce}#status{padding:9px 14px;min-height:44px;background:#101722;color:#d5e2ed;white-space:pre-wrap;font-size:12px}
 @media(max-width:650px){.top{gap:8px}.brand{width:100%}.toolbar{gap:5px}.toolbar button,.toolbar .file-button{padding:8px}.workspace{height:calc(100dvh - 270px)}.rail{width:39px}.rail button{width:31px}.hint{max-width:85%}}
+
+/* HOANGGIA STUDIO design tokens — coordinated dark olive and champagne gold. */
+:root{color-scheme:dark;--hg-bg:#0b0e0d;--hg-panel:#141916;--hg-panel2:#1b231e;--hg-line:#29352d;--hg-text:#eaece5;--hg-muted:#97a59a;--hg-gold:#d2af73;--hg-gold2:#eccb94}
+body{background:var(--hg-bg);color:var(--hg-text);font-family:system-ui,-apple-system,'Segoe UI',sans-serif}
+button,.file-button,select{background:#202a23;color:var(--hg-text);border:1px solid #3d493f;border-radius:9px;min-height:40px;font-weight:600;transition:background .15s,border-color .15s}
+button:hover:not(:disabled){background:#2b332a;border-color:var(--hg-gold)}
+button:focus-visible,.file-button:focus-within,input:focus-visible{outline:2px solid var(--hg-gold2);outline-offset:2px}
+.file-button{background:linear-gradient(130deg,#d3ad6c,#f3cf94);color:#1a160e;border-color:#d4b176;font-weight:750}
+.top{background:#101411;border-color:var(--hg-line);padding:13px 16px;min-height:66px}
+.brand{color:var(--hg-text);font-weight:800;letter-spacing:.08em}
+.brand::before{content:'◈';color:var(--hg-gold);font-size:21px;margin-right:10px}
+.filename,.muted{color:var(--hg-muted)}
+.toolbar{background:#141916;border-color:var(--hg-line);padding:9px 13px}
+.toolbar span{color:var(--hg-gold)}
+.rail{background:#101411;border-right:1px solid var(--hg-line)}
+.stage{background:#0b1120}
+.hint{background:#141916e8;border:1px solid #354739;color:#b3c5b4}
+.bottom{background:#101411;border-color:var(--hg-line)}
+.tab{background:#1d2920;color:var(--hg-gold);border:1px solid #354739}
+#status{background:#0e130f;color:#b9c8bb;border-top:1px solid var(--hg-line)}
+#cad-layer-panel{background:#141916f5!important;border-color:#415540!important}
+@media(max-width:650px){.top{padding:10px 12px}.brand{font-size:13px}.toolbar{padding:8px}.toolbar button,.toolbar .file-button{font-size:12px}.workspace{min-height:300px}}
 </style></head><body>
-<header class="top"><div class="brand">HOANGGIA CAD AI</div><span class="filename" id="filename">DWG Workspace · Bản thử nghiệm</span><label class="file-button" for="file">Mở DWG / DXF</label><input id="file" type="file" accept=".dwg,.dxf"><button id="fit">Vừa khung</button><small class="muted">Đọc trực tiếp trên thiết bị</small></header>
+<header class="top"><div class="brand">HOANGGIA <span style="color:var(--hg-gold)">CAD AI</span></div><span class="filename" id="filename">DWG Workspace · Bản thử nghiệm</span><label class="file-button" for="file">Mở DWG / DXF</label><input id="file" type="file" accept=".dwg,.dxf"><button id="fit">Vừa khung</button><small class="muted">Đọc trực tiếp trên thiết bị</small></header>
 <nav class="toolbar"><span>Khung nhìn</span><button type="button" disabled title="Đang kiểm tra API zoom">Phóng to +</button><button type="button" disabled title="Đang kiểm tra API zoom">Thu nhỏ −</button><button id="fit-secondary" type="button">Toàn bản vẽ</button><span>Kiểm tra</span><button type="button" disabled title="Chưa triển khai">Layer (sắp có)</button><button type="button" disabled title="Chưa triển khai">Đo (sắp có)</button></nav>
 <div class="workspace"><aside class="rail" aria-label="Công cụ"><button type="button" disabled title="Layer">▤</button><button type="button" disabled title="Đo">⌖</button></aside><main class="stage"><div id="viewer"></div><div class="hint">Model · Mặt bằng 2D · Bản thử nghiệm DWG</div><div class="axis">Y ↑<br>└──→ X</div></main></div>
 <footer class="bottom"><span class="tab">Model</span><span class="muted">Layout (chưa hỗ trợ)</span><span class="muted">DWG / DXF · WebAssembly</span></footer><div id="status" role="status">Sẵn sàng. Hãy mở DWG để kiểm tra khả năng đọc và hiển thị bản vẽ.</div>

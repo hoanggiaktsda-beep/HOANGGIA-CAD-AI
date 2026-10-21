@@ -1,4 +1,4 @@
-name: Deploy HOANGGIA CAD AI
+name: Deploy HOANGGIA CAD AI DWG viewer
 on:
   push:
     branches: [main]
@@ -18,13 +18,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-      - name: Prepare static CAD editor
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build DWG WASM viewer
         run: |
-          mkdir -p dist
-          cp cad.html dist/index.html
+          cd viewer-poc
+          npm install --no-audit --no-fund
+          npm run build
+      - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: viewer-poc/dist
       - id: deployment
         uses: actions/deploy-pages@v4

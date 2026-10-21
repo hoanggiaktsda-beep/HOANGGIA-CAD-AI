@@ -1,0 +1,14 @@
+{
+  "name": "hoanggia-cad-wasm-viewer",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build --base=./ && node copy-assets.mjs"
+  },
+  "dependencies": {
+    "@flyfish-dev/cad-viewer": "0.8.3"
+  },
+  "devDependencies": {
+    "vite": "^7.3.0"
+  }
+}

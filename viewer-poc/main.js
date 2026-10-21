@@ -370,6 +370,63 @@ for (const [button, direction] of [[zoomIn, 'in'], [zoomOut, 'out']]) {
   });
 }
 
+
+/* Quick CAD command line: view/navigation only until editable geometry is validated.
+   Do not claim destructive AutoCAD commands are implemented. */
+const commandWrap = document.createElement('div');
+commandWrap.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 12px;background:#101923;border-top:1px solid #526176';
+const commandPrompt = document.createElement('span');
+commandPrompt.textContent = 'Lệnh CAD ›';
+commandPrompt.style.cssText = 'white-space:nowrap;color:#d9b879;font-weight:700';
+const commandInput = document.createElement('input');
+commandInput.type = 'text';
+commandInput.placeholder = 'Nhập Z, ZE, ZA, LA, AUDIT, HELP…';
+commandInput.setAttribute('aria-label','Dòng lệnh CAD');
+commandInput.style.cssText = 'flex:1;min-width:0;background:#202d3c;border:1px solid #526176;color:white;border-radius:6px;padding:9px;font:14px monospace';
+commandWrap.append(commandPrompt, commandInput);
+document.getElementById('status').before(commandWrap);
+const commandHistory = [];
+let historyIndex = 0;
+const commandHelp = 'Lệnh đã hỗ trợ: Z / ZOOM (phóng to), ZO (thu nhỏ), ZE (vừa nội dung), ZA (toàn bộ), LA (layer), AUDIT (kiểm tra DWG), COLOR (màu nét), HELP (trợ giúp). Lệnh chỉnh sửa L/M/CO/TR chưa hỗ trợ; không làm thay đổi DWG gốc.';
+function executeCadCommand(raw) {
+  const cmd = String(raw || '').trim().toUpperCase();
+  if (!cmd) return;
+  commandHistory.push(cmd);
+  historyIndex = commandHistory.length;
+  if (cmd === 'HELP' || cmd === '?' || cmd === 'H') return setStatus(commandHelp);
+  if (cmd === 'LA' || cmd === 'LAYER') { panel.hidden = false; renderLayerPanel(); return setStatus('Đã mở danh sách layer.'); }
+  if (cmd === 'AUDIT') { auditButton.click(); return; }
+  if (cmd === 'COLOR') { colorButton.click(); return; }
+  if (!lastResult) return setStatus('Hãy mở DWG/DXF trước. ' + commandHelp);
+  if (cmd === 'Z' || cmd === 'ZOOM' || cmd === '+') viewer.zoomIn();
+  else if (cmd === 'ZO' || cmd === '-') viewer.zoomOut();
+  else if (cmd === 'ZE' || cmd === 'FIT') return fitDrawing('auto');
+  else if (cmd === 'ZA' || cmd === 'EXTENTS') return fitDrawing('extents');
+  else return setStatus('Lệnh ' + cmd + ' chưa được triển khai. ' + commandHelp);
+  setStatus('Đã thực hiện ' + cmd + ' · Zoom ' + viewer.getZoomPercent().toFixed(1) + '%');
+}
+commandInput.addEventListener('keydown', event => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    const command = commandInput.value;
+    commandInput.value = '';
+    try { executeCadCommand(command); } catch (error) { setStatus('Lỗi lệnh: ' + error.message); }
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault();
+    historyIndex = Math.max(0, historyIndex-1);
+    commandInput.value = commandHistory[historyIndex] || '';
+  } else if (event.key === 'ArrowDown') {
+    event.preventDefault();
+    historyIndex = Math.min(commandHistory.length, historyIndex+1);
+    commandInput.value = commandHistory[historyIndex] || '';
+  } else if (event.key === 'Escape') commandInput.value = '';
+});
+document.addEventListener('keydown', event => {
+  const target = event.target;
+  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable) return;
+  if (event.key === ':' || event.key === '/') { event.preventDefault(); commandInput.focus(); }
+});
+
 window.addEventListener('resize', () => {
   if (!viewer) return;
   try { viewer.resize(); } catch (error) { console.warn('Resize CAD viewer failed', error); }

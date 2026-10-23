@@ -333,7 +333,15 @@ async function loadDrawing(file) {
   filenameLabel.textContent = file.name;
   setStatus('Đang giải mã ' + file.name + ' (' + (file.size / 1048576).toFixed(1) + ' MB)…');
   try {
-    const decoded = await viewer.loadFile(file);
+    // Decode first; never render the uncorrected scene even for one frame.
+    const input = {file, fileName:file.name};
+    const detected = await viewer.registry.detect(input);
+    const decoded = await detected.loader.load({...input, buffer:detected.bytes}, {
+      wasmPath: new URL('./wasm/', document.baseURI).href,
+      workerUrl: new URL('./wasm/dwg-worker.js', document.baseURI).href,
+      onProgress: progress => setStatus((progress.message || progress.phase || 'Đang đọc bản vẽ') +
+        (progress.percent == null ? '' : ' · ' + progress.percent + '%'))
+    });
     setStatus('Đang khôi phục Block lồng, DIM và hệ tọa độ OCS…');
     await new Promise(resolve => requestAnimationFrame(resolve));
     const prepared = prepareDrawing(decoded.document);

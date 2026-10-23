@@ -54,3 +54,21 @@ assert.ok(Math.abs(midpoint.x-Math.SQRT1_2)<1e-12);assert.ok(Math.abs(midpoint.y
 const curve=splinePolyline(quarter,.0001);assert.ok(curve.points.length>20);assert.equal(curve.limited,false);
 assert.equal(splinePolyline({...quarter,knots:undefined}),null);
 console.log('Rational spline quarter-circle, adaptive sampling and missing-data checks passed');
+const {resolveFitSpline}=await import('./spline.js');
+const fit={type:'SPLINE',kind:'spline',degree:3,flag:0,fitPoints:[{x:0,y:0},{x:1,y:2},{x:3,y:1},{x:4,y:0}],startTangent:{x:4,y:3},endTangent:{x:2,y:-1}};
+const solved=resolveFitSpline(fit);assert.ok(solved);
+for(let i=0;i<fit.fitPoints.length;i++){
+ const pt=splinePoint(solved,i/(fit.fitPoints.length-1));
+ assert.ok(Math.hypot(pt.x-fit.fitPoints[i].x,pt.y-fit.fitPoints[i].y)<1e-8);
+}
+const h=1e-6,A=splinePoint(solved,0),B=splinePoint(solved,h);
+assert.ok(Math.abs((B.x-A.x)/h-4)<1e-3);assert.ok(Math.abs((B.y-A.y)/h-3)<1e-3);
+assert.equal(resolveFitSpline({...fit,flag:1}),null);
+console.log('Fit-point interpolation and authored start-tangent checks passed');
+const {textFontCss,familyForFont}=await import('./fonts.js');
+assert.equal(familyForFont('C:\\Fonts\\times.ttf'),'Times New Roman');
+assert.equal(textFontCss('arialbi.ttf').prefix,'italic bold ');
+assert.equal(textFontCss('hoatbif.shx'),null);
+assert.equal(textFontCss('txt'),null);
+assert.equal(textFontCss('segoeuil.ttf').prefix,'300 ');
+console.log('Original-font family mapping checks passed');

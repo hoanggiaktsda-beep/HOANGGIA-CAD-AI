@@ -1,5 +1,6 @@
 import {applyByBlockColorInheritance,applyByBlockLineTypeInheritance} from '@flyfish-dev/cad-viewer';
 import {IDENTITY_MATRIX,matrixFromInsert,multiplyMatrix,transformEntity,transformPoint} from './transform.js';
+import {textFontCss} from './fonts.js';
 import {splinePolyline} from './spline.js';
 const TAU=Math.PI*2;
 const kind=e=>String(e.type||'').toUpperCase();
@@ -43,7 +44,7 @@ function transformedLeaves(e,m){
 
  if(e.kind==='spline'){
   const result=splinePolyline(e,.02/Math.max(1,Math.hypot(m.a,m.b),Math.hypot(m.c,m.d)));
-  if(!result||result.limited)return [{...transformEntity(e,m),kind:'unknown',fidelityIssue:result?'Spline vượt giới hạn sai số hiển thị':'Spline thiếu tham số bậc/nút/trọng số'}];
+  if(!result||result.limited)return [{...transformEntity(e,m),kind:'unknown',fidelityIssue:result?'Spline vượt giới hạn sai số hiển thị':(e.flag&1)&&e.fitPoints?.length?'Bộ dựng chưa xác nhận spline kín dạng fit-point':'Spline thiếu tham số bậc/nút/trọng số'}];
   return [{...transformEntity(e,m),type:'LWPOLYLINE',kind:'polyline',vertices:result.points.map(p=>transformPoint(p,m)),controlPoints:undefined,fitPoints:undefined}];
  }
  if(['circle','arc','ellipse'].includes(e.kind)||['CIRCLE','ARC','ELLIPSE'].includes(kind(e)))return [affineConic(e,m)];
@@ -82,6 +83,7 @@ export function prepareDrawing(source){
  const output=[],issues=[],report={dimensions:0,missingDimensions:0,nestedInserts:0,missingBlocks:0,cycles:0,expanded:0};
  const blocks=source.blocks||{};
  const residuals=new Set();
+ const textStyles=new Map((source.metadata?.textStyles||[]).map(style=>[style.name?.toLowerCase(),style]));
  const namedBlocks=new Map(Object.values(blocks).map(b=>[b.name,b]));
  const lookup=name=>blocks[name]||namedBlocks.get(name);
  const attributeHandles=new Set();
@@ -90,6 +92,12 @@ export function prepareDrawing(source){
   const dimension=kind(e)==='DIMENSION';
   const insert=e.kind==='insert'||['INSERT','MINSERT'].includes(kind(e));
   if(!dimension&&!insert){
+   if(e.kind==='text'){
+    const style=textStyles.get(String(e.styleName||'').toLowerCase());
+    const font=textFontCss(style?.font);
+    if(font)e={...e,fontFamily:font.css,fontPrefix:font.prefix};
+    else residuals.add('Một số chữ chưa có font gốc tương thích (SHX hoặc STYLE không ghi font); đang dùng font thay thế.');
+   }
    const n=e.extrusionDirection;
    if(n&&(Math.abs(n.x||0)>1e-10||Math.abs(n.y||0)>1e-10))residuals.add('Đối tượng có pháp tuyến nghiêng: chưa xác nhận phép chiếu 3D.');
    const det=m.a*m.d-m.b*m.c;

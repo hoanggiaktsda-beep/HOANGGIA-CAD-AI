@@ -1,5 +1,6 @@
 import { CadViewer } from '@flyfish-dev/cad-viewer';
 import { assessFidelity, visibilitySummary } from './fidelity.js';
+import {familyForFont} from './geometry/fonts.js';
 import { prepareDrawing } from './geometry/prepare.js';
 
 const status = document.getElementById('status');
@@ -72,11 +73,11 @@ colorButton.addEventListener('click', () => {
 // Reference fonts are kept local to the browser; never uploaded to a server.
 const fontLabel = document.createElement('label');
 fontLabel.className = 'file-button';
-fontLabel.textContent = 'Nạp font SHX';
+fontLabel.textContent = 'Nạp font gốc (SHX / TTF)';
 fontLabel.title = 'Nạp font SHX gốc để khôi phục chữ và ký hiệu CAD';
 const fontInput = document.createElement('input');
 fontInput.type = 'file';
-fontInput.accept = '.shx';
+fontInput.accept = '.shx,.ttf,.otf,.woff,.woff2';
 fontInput.multiple = true;
 fontInput.style.display = 'none';
 fontLabel.appendChild(fontInput);
@@ -108,10 +109,17 @@ fontInput.addEventListener('change', async () => {
   let ok = 0;
   const errors = [];
   for (const file of files) {
-    try { await viewer.addReferenceFile(file); ok++; }
+    try {
+      if(/\.shx$/i.test(file.name))await viewer.addReferenceFile(file);
+      else {
+        const face=new FontFace(familyForFont(file.name),await file.arrayBuffer());
+        await face.load(); document.fonts.add(face); viewer.renderer.render();
+      }
+      ok++;
+    }
     catch (error) { errors.push(file.name + ': ' + error.message); }
   }
-  setStatus('Đã nạp ' + ok + '/' + files.length + ' font SHX. ' + (errors.join(' · ') || '') +
+  setStatus('Đã nạp ' + ok + '/' + files.length + ' font gốc. ' + (errors.join(' · ') || '') +
     ' ' + diagnoseGeometry());
   fontInput.value = '';
   updateFidelity();

@@ -1,3 +1,4 @@
+import {acgeInterpolateNurbsCurve} from './fit-nurbs.js';
 // Evaluate authored rational B-spline data with de Boor; never draw a control polygon as the curve.
 export function splinePoint(entity,u){
  const p=entity.degree,P=entity.controlPoints,U=entity.knots,n=P.length-1;
@@ -14,7 +15,24 @@ export function splinePoint(entity,u){
  }
  const v=d[p];return {x:v[0]/v[3],y:v[1]/v[3],z:v[2]/v[3]};
 }
+const fitCache=new WeakMap();
+export function resolveFitSpline(entity){
+ if(entity.controlPoints?.length && entity.knots?.length)return entity;
+ const points=entity.fitPoints;
+ if(!points||points.length<2||((entity.flag||0)&3))return null;
+ if(fitCache.has(points))return fitCache.get(points);
+ try{
+  const nonzero=t=>t&&Math.hypot(t.x||0,t.y||0,t.z||0)>1e-10;
+  const tuple=t=>[t.x,t.y,t.z||0];
+  const degree=Number(entity.degree||3);
+  const param=(entity.flag&2048)?'SqrtChord':(entity.flag&1024)?'Chord':'Uniform';
+  const result=acgeInterpolateNurbsCurve(points.map(tuple),degree,param,nonzero(entity.startTangent)?tuple(entity.startTangent):undefined,nonzero(entity.endTangent)?tuple(entity.endTangent):undefined);
+  const resolved={...entity,degree,controlPoints:result.controlPoints.map(([x,y,z])=>({x,y,z})),knots:result.knots,weights:result.weights,fitReconstructed:true};
+  fitCache.set(points,resolved);return resolved;
+ }catch{fitCache.set(points,null);return null;}
+}
 export function splinePolyline(entity,tolerance=.02){
+ entity=resolveFitSpline(entity);if(!entity)return null;
  const p=Number(entity.degree),P=entity.controlPoints,U=entity.knots;
  if(!Number.isInteger(p)||p<1||!P||P.length<=p||!U||U.length!==P.length+p+1||U.some((v,i)=>!Number.isFinite(v)||(i&&v<U[i-1]))||P.some(v=>!Number.isFinite(v.x)||!Number.isFinite(v.y)))return null;
  if(entity.weights&&(entity.weights.length!==P.length||entity.weights.some(w=>!Number.isFinite(w)||w<=0)))return null;

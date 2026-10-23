@@ -34,3 +34,23 @@ if(process.argv[2]){
  console.log('Actual fixture extents agree with DWG header within bounds padding (4%); no missing DIM/block references');
  fs.writeFileSync('/tmp/huong-prepared.json',JSON.stringify(prepared.document));
 }
+// Rotated text in a nonuniform INSERT: height follows its own baseline frame.
+const angledText={type:'TEXT',kind:'text',insertionPoint:{x:0,y:0},text:'AB',textHeight:10,xScale:1,rotation:Math.PI/2};
+const textDoc={...doc,entities:[{...inner,blockName:'A',insertionPoint:{x:0,y:0},scale:{x:2,y:1}}],blocks:{A:{entities:[angledText]}}};
+const textOut=prepareDrawing(textDoc).document.entities[0];
+assert.ok(Math.abs(textOut.textHeight-20)<1e-9);
+assert.ok(Math.abs(textOut.xScale-.5)<1e-9);
+const reflected=prepareDrawing({...textDoc,entities:[{...textDoc.entities[0],scale:{x:-1,y:1}}]}).document.entities[0];
+assert.equal(reflected.generationFlag,4);
+const {visibilitySummary,assessFidelity}=await import('../fidelity.js');
+const invisibleDoc={entities:[{type:'LINE',layer:'off'},{type:'LINE',layer:'on'}],layers:{off:{isVisible:false},on:{isVisible:true}},warnings:[]};
+assert.deepEqual(visibilitySummary(invisibleDoc,{skipped:1}),{hidden:1,unresolved:0});
+assert.equal(assessFidelity(invisibleDoc,{total:2,drawn:1,skipped:1}).state,'unverified');
+console.log('Rotated/mirrored text and hidden-layer accounting regression checks passed');
+const {splinePoint,splinePolyline}=await import('./spline.js');
+const quarter={degree:2,controlPoints:[{x:1,y:0},{x:1,y:1},{x:0,y:1}],knots:[0,0,0,1,1,1],weights:[1,Math.SQRT1_2,1]};
+const midpoint=splinePoint(quarter,.5);
+assert.ok(Math.abs(midpoint.x-Math.SQRT1_2)<1e-12);assert.ok(Math.abs(midpoint.y-Math.SQRT1_2)<1e-12);
+const curve=splinePolyline(quarter,.0001);assert.ok(curve.points.length>20);assert.equal(curve.limited,false);
+assert.equal(splinePolyline({...quarter,knots:undefined}),null);
+console.log('Rational spline quarter-circle, adaptive sampling and missing-data checks passed');

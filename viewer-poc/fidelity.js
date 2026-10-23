@@ -1,3 +1,18 @@
+const visibilityCache=new WeakMap();
+export function visibilitySummary(document,stats){
+ if(!document)return {hidden:0,unresolved:0};
+ let hidden=visibilityCache.get(document);
+ if(hidden===undefined){
+  const layers=document.layers||{},byName=new Map(Object.entries(layers).map(([name,layer])=>[name.toLowerCase(),layer]));
+  hidden=0;
+  for(const entity of document.entities||[]){
+   const layer=layers[entity.layer]||byName.get(String(entity.layer||'').toLowerCase());
+   if(entity.isVisible===false||layer?.isVisible===false||layer?.isFrozen===true)hidden++;
+  }
+  visibilityCache.set(document,hidden);
+ }
+ return {hidden,unresolved:Math.max(0,Number(stats?.skipped||0)-hidden)};
+}
 // A parser/render audit is diagnostic evidence, never an AutoCAD fidelity certificate.
 export function assessFidelity(document, stats, references = []) {
   const issues = [];
@@ -33,7 +48,8 @@ export function assessFidelity(document, stats, references = []) {
   if (references.length) issues.push('Thiếu tham chiếu/font: ' + references.map(r => r.fileName || r.name || 'không rõ').join(', '));
   const unsupported = Object.entries(stats?.unsupported || {}).filter(([, n]) => n > 0);
   if (unsupported.length) issues.push('Chưa hỗ trợ: ' + unsupported.map(([k, n]) => k + ' (' + n + ')').join(', '));
-  if (stats?.skipped > 0) issues.push('Bộ dựng hình bỏ qua ' + stats.skipped + ' đối tượng; cần kiểm tra nguyên nhân.');
+  const visibility=visibilitySummary(document,stats);
+  if (visibility.unresolved > 0) issues.push('Chưa dựng được ' + visibility.unresolved + ' đối tượng sau khi trừ đối tượng ẩn theo trạng thái bản vẽ.');
   for (const warning of document.warnings || []) issues.push(String(warning));
   if (!document.entities?.length) issues.push('Không có đối tượng Model Space; chưa xác minh nội dung Layout.');
   if (!stats || !(stats.total > 0)) issues.push('Chưa có thống kê dựng hình để kiểm tra.');

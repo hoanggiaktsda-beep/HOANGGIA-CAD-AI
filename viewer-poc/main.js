@@ -1,5 +1,5 @@
 import { CadViewer } from '@flyfish-dev/cad-viewer';
-import { assessFidelity } from './fidelity.js';
+import { assessFidelity, visibilitySummary } from './fidelity.js';
 import { prepareDrawing } from './geometry/prepare.js';
 
 const status = document.getElementById('status');
@@ -15,10 +15,17 @@ let backend = 'auto';
 let lastResult;
 let lastStats;
 let originalDocument;
+let displayedDocument;
+let fidelitySignature = null;
 const fidelityPanel = document.getElementById('fidelity');
 function updateFidelity() {
   if (!fidelityPanel) return;
-  const result = assessFidelity(originalDocument, lastStats, viewer?.getMissingReferences() || []);
+  const doc=displayedDocument||originalDocument;
+  const refs=viewer?.getMissingReferences()||[];
+  const signature=JSON.stringify([lastStats?.drawn,lastStats?.skipped,lastStats?.unsupported,refs]);
+  if(fidelitySignature?.document===doc&&fidelitySignature?.signature===signature)return;
+  fidelitySignature={document:doc,signature};
+  const result = assessFidelity(doc,lastStats,refs);
   fidelityPanel.hidden = !originalDocument;
   fidelityPanel.dataset.state = result.state;
   fidelityPanel.replaceChildren();
@@ -194,7 +201,7 @@ function createViewer(mode) {
     wasmPath: new URL('./wasm/', document.baseURI).href,
     workerUrl: new URL('./wasm/dwg-worker.js', document.baseURI).href,
     renderer: mode,
-    canvasOptions: { fitMode: 'auto', background: '#0b1120', showUnsupportedMarkers: false, maxCurveSegments: 512 },
+    canvasOptions: { fitMode: 'auto', background: '#0b1120', showUnsupportedMarkers: false, maxCurveSegments: 512, textMinPixelHeight: 0, maxVisibleTextLabels: 1000000 },
     onRenderStats: stats => { lastStats = stats; if (originalDocument) updateFidelity(); },
     onLoadProgress: progress => {
       if (loading) setStatus((progress.message || progress.phase || 'Đang đọc bản vẽ') +
@@ -217,6 +224,7 @@ function applyLayerFilter() {
       !hiddenLayers.has(name) && (!isolatedLayer || isolatedLayer === name) }
   ]));
   const document = { ...originalDocument, layers };
+  displayedDocument=document;
   viewer.setDocument(document, loadedName);
   viewer.renderer.setViewState(currentView);
   // setDocument returns a new load result, but the source remains the untouched DWG.
@@ -290,8 +298,8 @@ function summaryText() {
   const layers = doc?.layers?.length ?? Object.keys(doc?.layers ?? {}).length;
   const warnings = (lastResult.warnings || []).length;
   const missingFonts = viewer.getMissingReferences().length;
-  const drawn = lastStats ? ' · Nét dựng: ' + (lastStats.drawn ?? '?') +
-    '/' + (lastStats.total ?? '?') + ' (' + (lastStats.backend ?? backend) + ')' : '';
+  const visibility=visibilitySummary(displayedDocument||originalDocument,lastStats);
+  const drawn = lastStats ? ' · Đã dựng: ' + (lastStats.drawn ?? '?') + ' · Ẩn theo bản vẽ: '+visibility.hidden+' · Chưa dựng: '+visibility.unresolved+' ('+(lastStats.backend??backend)+')' : '';
   return 'Đối tượng: ' + count + ' · Block: ' + blocks +
     ' · Layer: ' + layers + ' · Cảnh báo: ' + warnings +
     ' · Thiếu SHX: ' + missingFonts + drawn;
@@ -302,7 +310,7 @@ function canvasText() {
   return 'Canvas: ' + (canvases.map(c => c.width + '×' + c.height).join(', ') || 'không có');
 }
 
-function fitDrawing(mode = 'auto') {
+function fitDrawing(mode = 'extents') {
   if (!lastResult) {
     setStatus('Chưa tải bản vẽ. Hãy mở DWG / DXF.');
     return;
@@ -323,6 +331,8 @@ async function loadDrawing(file) {
   loadedName = '';
   lastResult = undefined;
   originalDocument = undefined;
+  displayedDocument = undefined;
+  fidelitySignature = null;
   lastStats = undefined;
   updateFidelity();
   hiddenLayers.clear();
@@ -348,12 +358,13 @@ async function loadDrawing(file) {
     const result = viewer.setDocument(prepared.document, file.name);
     lastResult = {...result, geometryReport: prepared.report};
     originalDocument = prepared.document;
+    displayedDocument=originalDocument;
     console.info('DWG geometry preparation', prepared.report);
     loadedName = file.name;
     if (!panel.hidden) renderLayerPanel();
     // The CAD canvas is inside a responsive workspace; ensure its final size is applied.
     viewer.resize();
-    viewer.fit(originalDocument.savedView?.viewHeight > 0 ? 'saved-view' : 'extents');
+    viewer.fit('extents');
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     updateFidelity();
     setStatus('Đã giải mã, chưa xác nhận chính xác: ' + file.name + ' · ' + summaryText() + ' · ' + canvasText() +
@@ -372,7 +383,7 @@ async function loadDrawing(file) {
 
 createViewer(backend);
 document.getElementById('file').addEventListener('change', event => loadDrawing(event.target.files?.[0]));
-fitButton.addEventListener('click', () => fitDrawing('auto'));
+fitButton.addEventListener('click', () => fitDrawing('extents'));
 document.getElementById('fit-secondary').addEventListener('click', () => fitDrawing('extents'));
 document.getElementById('fit-secondary').textContent = 'Toàn bộ đối tượng';
 fitButton.textContent = 'Vừa nội dung';
@@ -436,7 +447,7 @@ function executeCadCommand(raw) {
   if (!lastResult) return setStatus('Hãy mở DWG/DXF trước. ' + commandHelp);
   if (cmd === 'Z' || cmd === 'ZOOM' || cmd === '+') viewer.zoomIn();
   else if (cmd === 'ZO' || cmd === '-') viewer.zoomOut();
-  else if (cmd === 'ZE' || cmd === 'FIT') return fitDrawing('auto');
+  else if (cmd === 'ZE' || cmd === 'FIT') return fitDrawing('extents');
   else if (cmd === 'ZA' || cmd === 'EXTENTS') return fitDrawing('extents');
   else return setStatus('Lệnh ' + cmd + ' chưa được triển khai. ' + commandHelp);
   setStatus('Đã thực hiện ' + cmd + ' · Zoom ' + viewer.getZoomPercent().toFixed(1) + '%');
@@ -490,7 +501,7 @@ deviceDock?.addEventListener('click', event => {
   try {
     if (action === 'zoom-in') viewer.zoomIn();
     else if (action === 'zoom-out') viewer.zoomOut();
-    else if (action === 'fit') fitDrawing('auto');
+    else if (action === 'fit') fitDrawing('extents');
     if (action !== 'fit') setStatus('Zoom ' + viewer.getZoomPercent().toFixed(1) + '% · ' + summaryText());
   } catch (error) { setStatus('Lỗi thao tác: ' + error.message); }
 });

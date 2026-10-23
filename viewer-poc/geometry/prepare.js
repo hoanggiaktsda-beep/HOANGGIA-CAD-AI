@@ -1,5 +1,6 @@
 import {applyByBlockColorInheritance,applyByBlockLineTypeInheritance} from '@flyfish-dev/cad-viewer';
 import {IDENTITY_MATRIX,matrixFromInsert,multiplyMatrix,transformEntity,transformPoint} from './transform.js';
+import {splinePolyline} from './spline.js';
 const TAU=Math.PI*2;
 const kind=e=>String(e.type||'').toUpperCase();
 // For planar OCS with a negative normal, local X points opposite world X.
@@ -40,6 +41,11 @@ function transformedLeaves(e,m){
  if(['CIRCLE','ARC','LWPOLYLINE','POLYLINE2D','TEXT','ATTRIB','ATTDEF','HATCH'].includes(kind(e)))
   m=multiplyMatrix(m,ocsMatrix(e));
 
+ if(e.kind==='spline'){
+  const result=splinePolyline(e,.02/Math.max(1,Math.hypot(m.a,m.b),Math.hypot(m.c,m.d)));
+  if(!result||result.limited)return [{...transformEntity(e,m),kind:'unknown',fidelityIssue:result?'Spline vượt giới hạn sai số hiển thị':'Spline thiếu tham số bậc/nút/trọng số'}];
+  return [{...transformEntity(e,m),type:'LWPOLYLINE',kind:'polyline',vertices:result.points.map(p=>transformPoint(p,m)),controlPoints:undefined,fitPoints:undefined}];
+ }
  if(['circle','arc','ellipse'].includes(e.kind)||['CIRCLE','ARC','ELLIPSE'].includes(kind(e)))return [affineConic(e,m)];
  const x=Math.hypot(m.a,m.b),y=Math.hypot(m.c,m.d);
  const anisotropic=Math.abs(x-y)>1e-8||Math.abs(m.a*m.c+m.b*m.d)>1e-8;
@@ -54,7 +60,22 @@ function transformedLeaves(e,m){
    out.push(affineConic(arc,m));
   }return out;
  }
- return [transformEntity(e,m)];
+ const transformed=transformEntity(e,m);
+ if(e.kind==='text'){
+  const angle=Number(e.rotation||0),c=Math.cos(angle),s=Math.sin(angle);
+  const ux=m.a*c+m.c*s,uy=m.b*c+m.d*s;
+  const vx=-m.a*s+m.c*c,vy=-m.b*s+m.d*c;
+  const baseline=Math.hypot(ux,uy),det=ux*vy-uy*vx;
+  const vertical=baseline>1e-14?Math.abs(det)/baseline:0;
+  if(vertical>1e-14){
+   transformed.rotation=Math.atan2(uy,ux);
+   if(typeof e.textHeight==='number')transformed.textHeight=e.textHeight*vertical;
+   if(typeof e.height==='number')transformed.height=e.height*vertical;
+   transformed.xScale=Number(e.xScale??1)*baseline/vertical;
+   transformed.generationFlag=Number(e.generationFlag||0)^(det<0?4:0);
+  }
+ }
+ return [transformed];
 }
 // Expand once with a composed affine matrix. Source document and coordinates remain unchanged.
 export function prepareDrawing(source){
@@ -110,6 +131,8 @@ export function prepareDrawing(source){
  for(const e of source.entities||[]){if(kind(e)==='ATTRIB'&&attributeHandles.has(e.handle))continue;walk(e,IDENTITY_MATRIX,[]);}
  report.expanded=output.length;
  issues.push(...residuals);
+ const invalidSplines=output.filter(e=>e.fidelityIssue).length;
+ if(invalidSplines)issues.push('Spline chưa dựng đúng: '+invalidSplines+' (không dùng đa giác điều khiển thay thế).');
  const types=new Set(output.map(kind));
  if(['OLE2FRAME','TOLERANCE','MULTILEADER','WIPEOUT'].some(t=>types.has(t)))issues.push('Còn đối tượng chuyên biệt cần đối chiếu CAD gốc: '+['OLE2FRAME','TOLERANCE','MULTILEADER','WIPEOUT'].filter(t=>types.has(t)).join(', '));
  if(report.missingDimensions)issues.push('DIM không có Block hình học: '+report.missingDimensions);

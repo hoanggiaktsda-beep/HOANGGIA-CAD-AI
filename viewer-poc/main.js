@@ -1,4 +1,5 @@
 import { CadViewer } from '@flyfish-dev/cad-viewer';
+import { assessFidelity } from './fidelity.js';
 
 const status = document.getElementById('status');
 const host = document.getElementById('viewer');
@@ -13,6 +14,23 @@ let backend = 'auto';
 let lastResult;
 let lastStats;
 let originalDocument;
+const fidelityPanel = document.getElementById('fidelity');
+function updateFidelity() {
+  if (!fidelityPanel) return;
+  const result = assessFidelity(originalDocument, lastStats, viewer?.getMissingReferences() || []);
+  fidelityPanel.hidden = !originalDocument;
+  fidelityPanel.dataset.state = result.state;
+  fidelityPanel.replaceChildren();
+  const title = document.createElement('strong'); title.textContent = result.message;
+  fidelityPanel.appendChild(title);
+  if (result.issues.length) {
+    const details = document.createElement('details');
+    const summary = document.createElement('summary'); summary.textContent = result.issues.length + ' mục cần kiểm tra';
+    const list = document.createElement('ul');
+    for (const issue of result.issues) { const li = document.createElement('li'); li.textContent = issue; list.appendChild(li); }
+    details.append(summary, list); fidelityPanel.appendChild(details);
+  }
+}
 const hiddenLayers = new Set();
 let isolatedLayer = null;
 let monochrome = false;
@@ -88,6 +106,7 @@ fontInput.addEventListener('change', async () => {
   setStatus('Đã nạp ' + ok + '/' + files.length + ' font SHX. ' + (errors.join(' · ') || '') +
     ' ' + diagnoseGeometry());
   fontInput.value = '';
+  updateFidelity();
 });
 
 
@@ -175,7 +194,7 @@ function createViewer(mode) {
     workerUrl: new URL('./wasm/dwg-worker.js', document.baseURI).href,
     renderer: mode,
     canvasOptions: { fitMode: 'auto', background: '#0b1120' },
-    onRenderStats: stats => { lastStats = stats; },
+    onRenderStats: stats => { lastStats = stats; if (originalDocument) updateFidelity(); },
     onLoadProgress: progress => {
       if (loading) setStatus((progress.message || progress.phase || 'Đang đọc bản vẽ') +
         (progress.percent == null ? '' : ' · ' + progress.percent + '%'));
@@ -303,6 +322,8 @@ async function loadDrawing(file) {
   loadedName = '';
   lastResult = undefined;
   originalDocument = undefined;
+  lastStats = undefined;
+  updateFidelity();
   hiddenLayers.clear();
   isolatedLayer = null;
   loading = true;
@@ -320,7 +341,8 @@ async function loadDrawing(file) {
     viewer.resize();
     viewer.fit('auto');
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    setStatus('Đã phân tích ' + file.name + ' · ' + summaryText() + ' · ' + canvasText() +
+    updateFidelity();
+    setStatus('Đã giải mã, chưa xác nhận chính xác: ' + file.name + ' · ' + summaryText() + ' · ' + canvasText() +
       '. Đang ở chế độ xem thử; cần đối chiếu CAD gốc vì block, hatch, text hoặc nét có thể chưa hiển thị chính xác.');
     console.info('CAD drawing diagnostics', { summary: result.summary, warnings: result.warnings, render: lastStats });
   } catch (error) {

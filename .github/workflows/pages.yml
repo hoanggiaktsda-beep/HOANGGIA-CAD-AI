@@ -33,6 +33,8 @@ jobs:
           test -s dist/wasm/dwg-worker.js
           grep -q 'DWG Workspace' dist/index.html
           cp ../cad.html dist/editor.html
+          cp ../index.html dist/studio.html
+          cp ../studio-ui.css dist/studio-ui.css
           cp dist/index.html dist/dwg.html
           cp dist/index.html dist/workspace.html
           printf 'DWG WASM viewer build: %s\n' "$GITHUB_SHA" > dist/build-version.txt

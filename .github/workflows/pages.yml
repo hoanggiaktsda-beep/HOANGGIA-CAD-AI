@@ -26,6 +26,7 @@ jobs:
           set -euo pipefail
           cd viewer-poc
           npm install --no-audit --no-fund
+          node geometry/check.mjs
           npm run build
           test -s dist/index.html
           test -s dist/wasm/libredwg-web.wasm

@@ -1,5 +1,6 @@
 import { CadViewer } from '@flyfish-dev/cad-viewer';
 import { assessFidelity } from './fidelity.js';
+import { prepareDrawing } from './geometry/prepare.js';
 
 const status = document.getElementById('status');
 const host = document.getElementById('viewer');
@@ -193,7 +194,7 @@ function createViewer(mode) {
     wasmPath: new URL('./wasm/', document.baseURI).href,
     workerUrl: new URL('./wasm/dwg-worker.js', document.baseURI).href,
     renderer: mode,
-    canvasOptions: { fitMode: 'auto', background: '#0b1120' },
+    canvasOptions: { fitMode: 'auto', background: '#0b1120', showUnsupportedMarkers: false, maxCurveSegments: 512 },
     onRenderStats: stats => { lastStats = stats; if (originalDocument) updateFidelity(); },
     onLoadProgress: progress => {
       if (loading) setStatus((progress.message || progress.phase || 'Đang đọc bản vẽ') +
@@ -332,14 +333,19 @@ async function loadDrawing(file) {
   filenameLabel.textContent = file.name;
   setStatus('Đang giải mã ' + file.name + ' (' + (file.size / 1048576).toFixed(1) + ' MB)…');
   try {
-    const result = await viewer.loadFile(file);
-    lastResult = result;
-    originalDocument = result.document;
+    const decoded = await viewer.loadFile(file);
+    setStatus('Đang khôi phục Block lồng, DIM và hệ tọa độ OCS…');
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    const prepared = prepareDrawing(decoded.document);
+    const result = viewer.setDocument(prepared.document, file.name);
+    lastResult = {...result, geometryReport: prepared.report};
+    originalDocument = prepared.document;
+    console.info('DWG geometry preparation', prepared.report);
     loadedName = file.name;
     if (!panel.hidden) renderLayerPanel();
     // The CAD canvas is inside a responsive workspace; ensure its final size is applied.
     viewer.resize();
-    viewer.fit('auto');
+    viewer.fit(originalDocument.savedView?.viewHeight > 0 ? 'saved-view' : 'extents');
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     updateFidelity();
     setStatus('Đã giải mã, chưa xác nhận chính xác: ' + file.name + ' · ' + summaryText() + ' · ' + canvasText() +
@@ -527,6 +533,8 @@ function showStudioDrawer(mode) {
       makeTool('＋ Phóng to', () => { if (lastResult) viewer.zoomIn(); else setStatus('Hãy mở DWG trước.'); }),
       makeTool('− Thu nhỏ', () => { if (lastResult) viewer.zoomOut(); else setStatus('Hãy mở DWG trước.'); }),
       makeTool('⌗ Vừa nội dung', () => fitButton.click()),
+      makeTool('Khung nhìn đã lưu trong DWG', () => fitDrawing('saved-view')),
+      makeTool('Xem toàn bộ bản vẽ', () => fitDrawing('extents')),
       makeTool('◐ Đổi màu nét', () => colorButton.click()),
       makeTool('⌘ Dòng lệnh CAD', () => { commandWrap.hidden=false; commandWrap.style.display='flex'; commandInput.focus(); })
     );

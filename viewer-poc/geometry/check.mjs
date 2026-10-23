@@ -1,0 +1,36 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import {prepareDrawing} from './prepare.js';
+import {computeCadDocumentBounds} from '@flyfish-dev/cad-viewer';
+const line={type:'LINE',kind:'line',layer:'0',startPoint:{x:0,y:0},endPoint:{x:1,y:0}};
+const inner={type:'INSERT',kind:'insert',blockName:'B',insertionPoint:{x:2,y:0},scale:{x:3,y:3},rotation:0};
+const doc={format:'dwg',entities:[{...inner,blockName:'A',insertionPoint:{x:10,y:20},scale:{x:2,y:2},rotation:Math.PI/2}],blocks:{A:{name:'A',basePoint:{x:0,y:0},entities:[inner]},B:{name:'B',entities:[line]}},layers:{},lineTypes:{},metadata:{},warnings:[]};
+const out=prepareDrawing(doc).document.entities[0];
+assert.ok(Math.abs(out.startPoint.x-10)<1e-9);assert.ok(Math.abs(out.startPoint.y-24)<1e-9);assert.ok(Math.abs(out.endPoint.y-30)<1e-9);
+assert.equal(doc.blocks.B.entities[0].endPoint.x,1);
+const dim={...doc,entities:[{type:'DIMENSION',kind:'text',blockName:'B',insertionPoint:{x:0,y:0}}]};
+assert.equal(prepareDrawing(dim).document.entities[0].type,'LINE');
+const circle={type:'CIRCLE',kind:'circle',center:{x:0,y:0},radius:1};
+const conic=prepareDrawing({...doc,blocks:{A:{entities:[circle]}},entities:[{...inner,blockName:'A',insertionPoint:{x:0,y:0},scale:{x:2,y:1}}]}).document.entities[0];
+assert.ok(Math.abs(conic.axisRatio-.5)<1e-10);assert.ok(Math.abs(Math.hypot(conic.majorAxisEndPoint.x,conic.majorAxisEndPoint.y)-2)<1e-10);
+const negative=prepareDrawing({...doc,entities:[{...line,type:'CIRCLE',kind:'circle',center:{x:-12,y:8},radius:2,extrusionDirection:{x:0,y:0,z:-1}}]}).document.entities[0];
+assert.equal(negative.center.x,12);assert.equal(negative.center.y,8);
+const missing=prepareDrawing({...doc,entities:[{type:'DIMENSION',blockName:'missing'}]});
+assert.equal(missing.report.missingDimensions,1);assert.equal(missing.document.entities[0].kind,'unknown');
+console.log('Nested transform, DIM block, conic, OCS, missing-reference and non-mutation checks passed');
+if(process.argv[2]){
+ const source=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));const before=computeCadDocumentBounds(source);
+ const t=performance.now();const prepared=prepareDrawing(source);console.log('Actual file report',prepared.report,'prepare ms',performance.now()-t);
+ console.log('Before bounds',before,'After bounds',computeCadDocumentBounds(prepared.document));
+ console.log('source bounds',source.header.EXTMIN,source.header.EXTMAX);
+ const bounds=computeCadDocumentBounds(prepared.document),h=source.header;
+ const width=h.EXTMAX.x-h.EXTMIN.x, height=h.EXTMAX.y-h.EXTMIN.y;
+ assert.ok(Math.abs(bounds.minX-h.EXTMIN.x)<width*.04);
+ assert.ok(Math.abs(bounds.maxX-h.EXTMAX.x)<width*.04);
+ assert.ok(Math.abs(bounds.minY-h.EXTMIN.y)<height*.04);
+ assert.ok(Math.abs(bounds.maxY-h.EXTMAX.y)<height*.04);
+ assert.equal(prepared.report.missingDimensions,0);
+ assert.equal(prepared.report.missingBlocks,0);
+ console.log('Actual fixture extents agree with DWG header within bounds padding (4%); no missing DIM/block references');
+ fs.writeFileSync('/tmp/huong-prepared.json',JSON.stringify(prepared.document));
+}

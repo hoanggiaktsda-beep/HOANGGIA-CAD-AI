@@ -546,3 +546,18 @@ window.addEventListener('error', event => {
 window.addEventListener('unhandledrejection', event => {
   if (loadedName) setStatus('Lỗi xử lý: ' + (event.reason?.message || String(event.reason)) + ' · ' + summaryText());
 });
+
+// Public fixture uses the exact same file-loading pipeline as local files.
+const sampleButton = document.getElementById('sample-dwg');
+sampleButton.addEventListener('click', async () => {
+  if (loading) return;
+  sampleButton.disabled = true;
+  try {
+    const response = await fetch(new URL('./samples/sample_2018.dwg', document.baseURI));
+    if (!response.ok) throw new Error('Không tải được bản vẽ mẫu: HTTP ' + response.status);
+    await loadDrawing(new File([await response.arrayBuffer()], 'sample_2018.dwg'));
+  } catch (error) { setStatus(error.message); }
+  finally { sampleButton.disabled = false; }
+});
+// Re-selecting the same file retries parsing after a failed load.
+document.getElementById('file').addEventListener('click', event => { event.target.value = ''; });
